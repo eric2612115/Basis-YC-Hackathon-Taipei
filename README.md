@@ -2,6 +2,8 @@
 
 **A guaranteed resale price for GPUs, so lenders can finance them without a fire sale.**
 
+**Try it live: [basis-lucs.onrender.com](https://basis-lucs.onrender.com)** (free plan: the first visit can take half a minute to wake up). Start with **Trade**.
+
 Built on 11 November 2026 at c0mpiled-18, the YC Startup School hackathon in Taipei, for the YC request for startups "Wall Street for the Physical Buildout".
 
 ## Why now
