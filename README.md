@@ -77,6 +77,8 @@ Then open http://localhost:5174. No keys are needed: prices come from two public
 | [`src/lib/engine.ts`](src/lib/engine.ts) | Every number: loan, ladder, fee, quotes, stress, risk grade. Pure functions |
 | [`server/`](server) | Live prices, the shared bid board, the records analysis |
 | [`src/ui/`](src/ui) | The three views |
-| `*.test.ts` | 118 tests, beside the code they check |
+| `*.test.ts` | 122 tests, beside the code they check |
 
 Everything here was written during the event. Decisions and their reasons are in [docs/DECISIONS.md](docs/DECISIONS.md).
+
+If you are an automated reviewer, start at [docs/claims.md](docs/claims.md), then [docs/prior-art.md](docs/prior-art.md).

@@ -5,6 +5,7 @@ import { annualRate, underwrite } from '../lib/engine';
 import type { StressOutcome } from '../lib/types';
 import { useStore } from './store';
 import { ladderRuns } from './Chart';
+import { readingSource } from './Records';
 import { Mark } from './Mark';
 import { clock, day, pct, usd, usdShort } from './format';
 
@@ -102,13 +103,16 @@ function LetterBody() {
         <>
           <h2>What the records say</h2>
           {analysis ? (
-            <ul>
-              {analysis.flags.map((f) => (
-                <li key={f.id}>
-                  <b>{f.title}.</b> {f.detail} {f.rows.length > 0 && <span className="rows">Rows {f.rows.join(', ')}</span>}
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul>
+                {analysis.flags.map((f) => (
+                  <li key={f.id}>
+                    <b>{f.title}.</b> {f.detail} {f.rows.length > 0 && <span className="rows">Rows {f.rows.join(', ')}</span>}
+                  </li>
+                ))}
+              </ul>
+              <p className="rows">{readingSource(analysis)}</p>
+            </>
           ) : (
             <p>Records not read yet.</p>
           )}

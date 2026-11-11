@@ -1,6 +1,6 @@
 // Step 1, part two: the records. The page shows the file being read, then reveals each flag with the rows it points to.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { RiskGrade } from '../lib/types';
+import type { Analysis, RiskGrade } from '../lib/types';
 import { useStore } from './store';
 import { parseCsv } from './csv';
 import { pct } from './format';
@@ -15,6 +15,13 @@ const COLUMNS: [string, string][] = [
   ['downtime_hours', 'Down'],
   ['notes', 'Notes'],
 ];
+/** Who read the records, said only as far as it is true: a model is named only when one actually read the file. */
+export function readingSource(a: Analysis): string {
+  if (a.source === 'model') return a.model ? `Read by ${a.model}.` : 'Read by a model.';
+  if (a.source === 'rules') return 'Checked by rules.';
+  return a.model ? `Read ahead of time by ${a.model}.` : 'Checked by rules ahead of time.';
+}
+
 const MAX_ROWS = 400;
 const STEP_MS = 400;
 
@@ -78,7 +85,7 @@ export function Records() {
       {busy && <p className="meta reading">Reading the records…</p>}
       {analysisLoad === 'error' && <p className="meta bad-text">{analysisError}</p>}
       {!analysis && !busy && analysisLoad !== 'error' && (
-        <p className="meta">The cluster's rental records. The AI flags what a lender should worry about, with the rows it read.</p>
+        <p className="meta">Basis reads the cluster's rental records and flags what a lender should worry about, with the rows it read.</p>
       )}
       {analysis && !busy && (
         <div className={table ? 'reading-grid' : 'reading-grid no-table'}>
@@ -107,13 +114,7 @@ export function Records() {
             </ul>
             {done && analysis.memo && <p className="memo fade-in">{analysis.memo}</p>}
             {done && (
-              <p className="meta source fade-in">
-                {analysis.source === 'model'
-                  ? `Read by ${analysis.model ?? 'the model'} just now.`
-                  : analysis.source === 'rules'
-                    ? 'Checked by rules.'
-                    : 'Sample records, read ahead of time.'}
-              </p>
+              <p className="meta source fade-in">{readingSource(analysis)}</p>
             )}
           </div>
           {grade && done && <GradeCard g={grade} without={gradeWithoutBids} />}
