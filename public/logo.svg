@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 222 64" width="222" height="64">
+  <title>Basis</title>
+  <path d="M4 4h20v14h16v14h20v28H4z" fill="#d2b06a"/>
+  <path d="M4 18 50 60H4z" fill="#111111"/>
+  <text x="78" y="56" fill="#111111" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="54" font-weight="800" letter-spacing="-1.6">Basis</text>
+</svg>

@@ -1,9 +1,10 @@
 // Trade: one deal seen from both sides. The buyer posts a bid, the owner asks for a price, they match;
-// then the buyer is paid for waiting and the owner is protected while the market price moves.
+// then the buyer earns the fee and the owner is covered while the GPU's resale price moves.
 // Every number comes from the engine; the price path is a scenario the visitor picks.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { expectedUnitValue, quoteBid } from '../lib/engine';
 import { useStore } from './store';
+import { tradeAsset, tradeDeal } from '../data/samples';
 import { pct, usd, usdShort } from './format';
 import { useCountUp } from './hooks';
 import '../styles/trade.css';
@@ -14,9 +15,13 @@ type Path = 'fall' | 'hold';
 const cameBackPaid = () => new URLSearchParams(window.location.search).get('paid') === '1';
 
 export function Trade() {
-  const { asset, assumptions, kind } = useStore();
-  const units = asset.units;
-  const price = Math.round((asset.usedPriceToday * 11) / 15 / 100) * 100; // $11,000 for the sample H100
+  const store = useStore();
+  const { assumptions, kind } = store;
+  const asset = tradeAsset(store.asset);
+  const gpu = asset.kind === 'gpu';
+  const units = gpu ? tradeDeal.units : asset.units;
+  const price = gpu ? tradeDeal.pricePerUnit : Math.round((asset.usedPriceToday * 11) / 15 / 100) * 100;
+  const one = units === 1;
   const [feePaid, setFeePaid] = useState(cameBackPaid);
   const [bid, setBid] = useState(feePaid);
   const [ask, setAsk] = useState(feePaid);
@@ -29,19 +34,20 @@ export function Trade() {
   const raf = useRef(0);
 
   const q = useMemo(() => quoteBid(asset, { id: 'trade', buyer: 'Buyer', units, pricePerUnit: price, validThroughMonth: MONTHS, fundedPct: 1 }, assumptions), [asset, units, price, assumptions]);
-  const endPrice = path === 'fall' ? asset.usedPriceToday * 0.55 : expectedUnitValue(asset, MONTHS);
+  const endPrice = path === 'fall' ? (gpu ? tradeDeal.fallTo : asset.usedPriceToday * 0.55) : expectedUnitValue(asset, MONTHS);
   const marketAt = (m: number) => asset.usedPriceToday * Math.pow(endPrice / asset.usedPriceToday, m / MONTHS);
   const market = marketAt(month);
   const settled = matched && month >= MONTHS;
   const below = market < price;
-  const yieldPerYear = q.feeTotal / (price * units) / (MONTHS / 12);
+  const fee = Math.round(q.feeTotal); // whole dollars, the amount Stripe charges
+  const yieldPerYear = fee / (price * units) / (MONTHS / 12);
 
   // once matched, time runs from today to the end of the bid
   useEffect(() => {
     if (!matched) return;
     const t0 = performance.now(), from = 0;
     const tick = (now: number) => {
-      const m = Math.min(MONTHS, from + ((now - t0) / 7000) * MONTHS);
+      const m = Math.min(MONTHS, from + ((now - t0) / 9000) * MONTHS);
       setMonth(m);
       if (m < MONTHS) raf.current = requestAnimationFrame(tick);
     };
@@ -49,7 +55,7 @@ export function Trade() {
     return () => cancelAnimationFrame(raf.current);
   }, [matched, path]);
 
-  const paid = useCountUp(matched ? q.feeTotal : 0, 900);
+  const paid = useCountUp(matched ? fee : 0, 900);
   const reset = () => { cancelAnimationFrame(raf.current); setBid(false); setAsk(false); setMonth(0); setFeePaid(false); setPayError(''); };
 
   // the fee can be paid by card when the server has a Stripe key; coming back from Stripe, tidy the address
@@ -81,21 +87,21 @@ export function Trade() {
 
       <div className="trade-grid">
         <section className={`side ${bid ? 'posted' : ''}`}>
-          <div className="side-head"><span className="who">Buyer</span><span className="meta">wants used {asset.unitLabel}s</span></div>
-          <div className="order">Buy {units} at <b>{usd(price)}</b>, any time in {MONTHS} months</div>
+          <div className="side-head"><span className="who">Buyer</span><span className="meta">bids low</span></div>
+          <div className="order">Buy {one ? `a used ${asset.unitLabel}` : units} at <b>{usd(price)}</b>, any time in {MONTHS} months</div>
           {!bid ? <button className="btn primary" onClick={() => setBid(true)}>Post bid</button> : <div className="chip">{matched ? 'Matched' : 'Bid posted'}</div>}
           <div className={`result ${matched ? 'show' : ''}`}>
-            <div className="label">Paid for waiting</div>
+            <div className="label">Interest earned</div>
             <div className="big num good-text">{usdShort(paid)}</div>
             <div className="sub">{pct(yieldPerYear, 1)} a year on the cash set aside</div>
-            <div className="line">{settled ? (below ? `Takes ${units} ${asset.unitLabel}s at ${usd(price)}` : 'Bid expires. Keeps the fee.') : below ? `Will buy at ${usd(price)}` : 'Waiting'}</div>
+            <div className="line">{settled ? (below ? `Takes the ${one ? asset.unitLabel : `${units} ${asset.unitLabel}s`} at ${usd(price)}` : `Bid expires. Keeps the ${usdShort(fee)}.`) : below ? `Will buy at ${usd(price)}` : 'Waiting'}</div>
           </div>
         </section>
 
         <section className="mid">
-          <div className="label">Used {asset.name.replace(/^\d+ × /, '')}, market price</div>
+          <div className="label">Used {asset.name.replace(/^\d+ × (Nvidia )?/, '')}: resale price</div>
           <div className={`big-3 num ${matched && below ? 'bad-text' : ''}`}>{usd(Math.round(market / 10) * 10)}</div>
-          <svg viewBox={`0 0 ${Wc} ${Hc}`} className="trade-chart" role="img" aria-label="Market price against the agreed price">
+          <svg viewBox={`0 0 ${Wc} ${Hc}`} className="trade-chart" role="img" aria-label="Resale price against the agreed price">
             <line x1="8" x2={Wc - 8} y1={y(price)} y2={y(price)} className={`floor ${matched ? 'on' : ''}`} />
             <text x={Wc - 10} y={y(price) - 8} textAnchor="end" className={`floor-label ${matched ? 'on' : ''}`}>agreed {usd(price)}</text>
             {matched && <polyline points={pts} className="path" />}
@@ -110,16 +116,16 @@ export function Trade() {
         </section>
 
         <section className={`side ${ask ? 'posted' : ''}`}>
-          <div className="side-head"><span className="who">GPU owner</span><span className="meta">wants protection</span></div>
-          <div className="order">Sell {units} at no less than <b>{usd(price)}</b></div>
-          {!ask ? <button className="btn primary" onClick={() => setAsk(true)}>Ask for a price</button> : <div className="chip">{matched ? 'Matched' : 'Ask posted'}</div>}
+          <div className="side-head"><span className="who">GPU owner</span><span className="meta">buys insurance</span></div>
+          <div className="order">Sell {one ? 'it' : units} at no less than <b>{usd(price)}</b></div>
+          {!ask ? <button className="btn primary" onClick={() => setAsk(true)}>Buy insurance</button> : <div className="chip">{matched ? 'Matched' : 'Waiting for a buyer'}</div>}
           <div className={`result ${matched ? 'show' : ''}`}>
             <div className="label">Protected</div>
-            <div className={`big num ${below ? 'good-text' : ''}`}>{usdShort(Math.max(0, price - market) * units)}</div>
-            <div className="sub">guaranteed {usd(price)} per {asset.unitLabel}, market {usd(Math.round(market / 10) * 10)}</div>
-            <div className="line">{settled ? (below ? `Sells at ${usd(price)}, not ${usd(Math.round(market / 10) * 10)}` : 'Keeps the machines. Paid the fee.') : below ? 'Covered below the agreed price' : 'Covered if prices fall'}</div>
-            {feePaid ? <div className="pay good-text">Fee paid: {usdShort(q.feeTotal)} <span className="meta">Stripe, test mode</span></div>
-              : canPay && <div className="pay"><button className="btn" onClick={payFee} disabled={paying}>{paying ? 'Opening Stripe' : `Pay the ${usdShort(q.feeTotal)} fee`}</button><span className="meta">Stripe, test mode</span></div>}
+            <div className={`big num ${below ? 'good-text' : ''}`}>{(() => { const v = Math.round(Math.max(0, price - market) * units); return v >= 1000 ? usdShort(v) : usd(v); })()}</div>
+            <div className="sub">guaranteed {usd(price)} per {asset.unitLabel}, resale {usd(Math.round(market / 10) * 10)}</div>
+            <div className="line">{settled ? (below ? `Sells at ${usd(price)}, not ${usd(Math.round(market / 10) * 10)}` : `Keeps the ${asset.unitLabel}${one ? '' : 's'}. Paid ${usdShort(fee)} for insurance.`) : below ? 'Covered below the agreed price' : 'Covered if prices fall'}</div>
+            {feePaid ? <div className="pay good-text">Insurance paid: {usdShort(fee)} <span className="meta">Stripe, test mode</span></div>
+              : canPay && <div className="pay"><button className="btn" onClick={payFee} disabled={paying}>{paying ? 'Opening Stripe' : `Pay ${usdShort(fee)} for insurance`}</button><span className="meta">Stripe, test mode</span></div>}
             {payError && <div className="meta bad-text">{payError}</div>}
           </div>
         </section>

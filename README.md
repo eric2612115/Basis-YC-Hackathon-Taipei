@@ -28,7 +28,7 @@ With Basis, buyers who want used GPUs at a discount commit to a price today, and
 
 ## Try it
 
-0. **Trade**: one deal from both sides. The buyer posts a bid, the GPU owner asks for a price, they match; then watch the buyer get paid for waiting and the owner get protected as the price moves. The owner pays the fee on a Stripe Checkout page.
+0. **Trade**: one deal from both sides, per GPU. A buyer promises to buy a used H100 at $10,000 any time in 6 months; the owner pays $500 for that promise (on a Stripe Checkout page). Watch the buyer earn the $500 and the owner stay covered as the resale price moves.
 1. **Borrow**, step 1: read the sample rental records. The model flags what a lender should worry about, with the rows it read, and the cluster gets a risk grade.
 2. Step 2: what a bank lends.
 3. Step 3: line up buyers and watch what a lender can lend.

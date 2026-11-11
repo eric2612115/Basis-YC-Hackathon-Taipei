@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Basis</title>
+  <!-- Brass: a ladder of prices committed buyers will pay. Black: the loan, always under it. -->
+  <path d="M4 4h20v14h16v14h20v28H4z" fill="#d2b06a"/>
+  <path d="M4 18 50 60H4z" fill="#111111"/>
+</svg>

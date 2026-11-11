@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { quoteBid } from '../src/lib/engine';
-import { assumptions, gpuCluster } from '../src/data/samples';
+import { assumptions, gpuCluster, tradeAsset, tradeDeal } from '../src/data/samples';
 import { checkoutBody, createCheckout, feeCents } from './stripe';
 
-const deal = { asset: 'gpu' as const, units: 64, pricePerUnit: 11_000, months: 6 };
+const deal = { asset: 'gpu' as const, units: tradeDeal.units, pricePerUnit: tradeDeal.pricePerUnit, months: tradeDeal.months };
 
 describe('paying the fee through Stripe', () => {
-  it('charges the fee the engine prices for the promise, in cents', () => {
-    const q = quoteBid(gpuCluster, { id: 't', buyer: 'B', units: 64, pricePerUnit: 11_000, validThroughMonth: 6, fundedPct: 1 }, assumptions);
-    expect(feeCents(deal)).toBe(Math.round(q.feeTotal * 100));
+  it('charges the fee the engine prices for the promise, in whole dollars', () => {
+    const q = quoteBid(tradeAsset(gpuCluster), { id: 't', buyer: 'B', units: 1, pricePerUnit: 10_000, validThroughMonth: 6, fundedPct: 1 }, assumptions);
+    expect(feeCents(deal)).toBe(Math.round(q.feeTotal) * 100);
+  });
+
+  it('the Trade example: a promise to buy one GPU at $10,000 for 6 months costs $500', () => {
+    expect(feeCents(deal)).toBe(500_00);
   });
 
   it('builds a session form with that amount, the currency and the way back', () => {

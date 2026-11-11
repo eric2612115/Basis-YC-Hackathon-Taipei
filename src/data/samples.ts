@@ -36,3 +36,13 @@ export const loanTerms: LoanTerms = { months: 36, baseRate: 0.04, spread: 0.05 }
 export const robotLoanTerms: LoanTerms = { months: 48, baseRate: 0.04, spread: 0.05 };
 export const assumptions: Assumptions = { riskFree: 0.04, discountRate: 0.12, forcedSaleHaircut: 0.3, minDscr: 1.0 };
 export const noStress: Stress = { chipShipsMonth: null, priceDrop: 0.5, rentDrop: 0.5, utilizationDrop: 0.25 };
+
+/**
+ * The one deal the Trade view and the demo film walk through, per GPU: a buyer promises to buy a used H100
+ * at $10,000 any time in the next 6 months, and the owner pays about $500 for that promise (the engine prices it).
+ * The market starts near $14,400 and, in the "prices fall" scenario, ends at $7,000.
+ */
+export const tradeDeal = { units: 1, pricePerUnit: 10_000, months: 6, marketToday: 14_395, fallTo: 7_000 };
+
+/** The asset the Trade deal is priced on: the sample cluster, with the deal's market price today. */
+export const tradeAsset = (asset: Asset): Asset => (asset.kind === 'gpu' ? { ...asset, usedPriceToday: tradeDeal.marketToday } : asset);

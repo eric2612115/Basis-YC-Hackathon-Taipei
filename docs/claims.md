@@ -18,3 +18,4 @@ Each claim Basis makes, and the test that proves it. Run them all with `npm test
 | 12 | The reference price is the median of live prices from RunPod and Akash | "after a fetch it is live: two sources, the median as the reference, one tick of history" | `server/prices.test.ts` |
 | 13 | Only the person who posted a bid can remove it | "only the token removes a posted bid; sample bids stay" | `server/board.test.ts` |
 | 14 | The fee charged through Stripe is the fee the engine prices, never an amount from the browser | "charges the fee the engine prices for the promise, in cents" | `server/stripe.test.ts` |
+| 15 | The Trade example: a promise to buy one GPU at $10,000 any time in 6 months is priced at $500 | "the Trade example: a promise to buy one GPU at $10,000 for 6 months costs $500" | `server/stripe.test.ts` |
