@@ -1,5 +1,5 @@
 // Shared types. This file is the contract between the engine (src/lib), the server (server/) and the UI (src/ui).
-// Change it only through the lead conversation, so the two builders never drift apart.
+// Change it deliberately: all three depend on these shapes.
 // Money is in US dollars; rates and shares are fractions (0.25 = 25%); time is in months from today (month 0).
 
 export type AssetKind = 'gpu' | 'robot';
@@ -29,8 +29,16 @@ export interface Bid {
   pricePerUnit: number;
   validThroughMonth: number;
   fundedPct: number;            // share of the purchase money already set aside (1 = fully funded)
-  sample?: boolean;
+  sample?: boolean;             // seeded example, not posted by a visitor
+  postedAt?: string;            // ISO time, set by the server for bids posted by visitors
 }
+
+/** What a visitor sends to post a bid. The server adds id, postedAt and fundedPct, and never returns `contact`. */
+export interface BidInput { asset: AssetKind; buyer: string; contact?: string; units: number; pricePerUnit: number; validThroughMonth: number }
+/** The shared bid board for one kind of asset: the seeded sample ladder plus bids posted by visitors. */
+export interface BidBook { asset: AssetKind; bids: Bid[]; asOf: string }
+/** Someone asking for this to be run on their own machines. */
+export interface LeadInput { name: string; email: string; note?: string }
 
 export interface LoanTerms { months: number; baseRate: number; spread: number }
 export interface Assumptions { riskFree: number; discountRate: number; forcedSaleHaircut: number; minDscr: number }
