@@ -87,14 +87,14 @@ export function Trade() {
 
       <div className="trade-grid">
         <section className={`side ${bid ? 'posted' : ''}`}>
-          <div className="side-head"><span className="who">Buyer</span><span className="meta">bids low</span></div>
-          <div className="order">Buy {one ? `a used ${asset.unitLabel}` : units} at <b>{usd(price)}</b>, any time in {MONTHS} months</div>
+          <div className="side-head"><span className="who">Buyer</span><span className="meta">buy low + earn yield</span></div>
+          <div className="order">Bid <b>{usd(price)}</b> · {MONTHS} months</div>
           {!bid ? <button className="btn primary" onClick={() => setBid(true)}>Post bid</button> : <div className="chip">{matched ? 'Matched' : 'Bid posted'}</div>}
           <div className={`result ${matched ? 'show' : ''}`}>
-            <div className="label">Interest earned</div>
-            <div className="big num good-text">{usdShort(paid)}</div>
-            <div className="sub">{pct(yieldPerYear, 1)} a year on the cash set aside</div>
-            <div className="line">{settled ? (below ? `Takes the ${one ? asset.unitLabel : `${units} ${asset.unitLabel}s`} at ${usd(price)}` : `Bid expires. Keeps the ${usdShort(fee)}.`) : below ? `Will buy at ${usd(price)}` : 'Waiting'}</div>
+            <div className="label">Yield</div>
+            <div className="big num good-text">+{usdShort(paid)}</div>
+            <div className="sub">{pct(yieldPerYear, 0)} a year</div>
+            <div className="line">{settled ? (below ? `Gets the ${asset.unitLabel} at ${usd(price)}` : `Keeps +${usdShort(fee)}`) : ''}</div>
           </div>
         </section>
 
@@ -116,21 +116,21 @@ export function Trade() {
         </section>
 
         <section className={`side ${ask ? 'posted' : ''}`}>
-          <div className="side-head"><span className="who">GPU owner</span><span className="meta">buys insurance</span></div>
-          <div className="order">Sell {one ? 'it' : units} at no less than <b>{usd(price)}</b></div>
+          <div className="side-head"><span className="who">GPU owner</span><span className="meta">hedge the drop</span></div>
+          <div className="order">Floor <b>{usd(price)}</b> · {MONTHS} months</div>
           {!ask ? <button className="btn primary" onClick={() => setAsk(true)}>Buy insurance</button> : <div className="chip">{matched ? 'Matched' : 'Waiting for a buyer'}</div>}
           <div className={`result ${matched ? 'show' : ''}`}>
             <div className="label">Protected</div>
-            <div className={`big num ${below ? 'good-text' : ''}`}>{(() => { const v = Math.round(Math.max(0, price - market) * units); return v >= 1000 ? usdShort(v) : usd(v); })()}</div>
-            <div className="sub">guaranteed {usd(price)} per {asset.unitLabel}, resale {usd(Math.round(market / 10) * 10)}</div>
-            <div className="line">{settled ? (below ? `Sells at ${usd(price)}, not ${usd(Math.round(market / 10) * 10)}` : `Keeps the ${asset.unitLabel}${one ? '' : 's'}. Paid ${usdShort(fee)} for insurance.`) : below ? 'Covered below the agreed price' : 'Covered if prices fall'}</div>
+            <div className={`big num ${below ? 'good-text' : ''}`}>{(() => { const v = Math.round(Math.max(0, price - market) * units); return `${v > 0 ? '+' : ''}${v >= 1000 ? usdShort(v) : usd(v)}`; })()}</div>
+            
+            <div className="line">{settled ? (below ? `Sells at ${usd(price)}, not ${usd(Math.round(market / 10) * 10)}` : `Paid −${usdShort(fee)}`) : ''}</div>
             {feePaid ? <div className="pay good-text">Insurance paid: {usdShort(fee)} <span className="meta">Stripe, test mode</span></div>
-              : canPay && <div className="pay"><button className="btn" onClick={payFee} disabled={paying}>{paying ? 'Opening Stripe' : `Pay ${usdShort(fee)} for insurance`}</button><span className="meta">Stripe, test mode</span></div>}
+              : canPay && <div className="pay"><button className="btn" onClick={payFee} disabled={paying}>{paying ? 'Opening Stripe' : `Pay ${usdShort(fee)}`}</button><span className="meta">Stripe test</span></div>}
             {payError && <div className="meta bad-text">{payError}</div>}
           </div>
         </section>
       </div>
-      <p className="meta trade-note">A simulation of one deal. The fee is priced by the engine; the price path is the scenario you pick.</p>
+      <p className="meta trade-note">Simulation of one deal. The price path is the scenario you pick.</p>
     </div>
   );
 }
