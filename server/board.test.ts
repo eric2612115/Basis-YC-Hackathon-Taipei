@@ -39,7 +39,7 @@ describe('the shared bid board', () => {
     board.post({ ...good, units: 64, pricePerUnit: 12_500, validThroughMonth: 6 });
     const after = underwrite(gpuCluster, board.book('gpu').bids, loanTerms, assumptions, noStress);
     expect(before).toBe(704_000); expect(after.committedLoan).toBeGreaterThan(before);
-    for (const p of after.path) if (p.month < loanTerms.months) expect(p.balance).toBeLessThanOrEqual(p.guaranteed + 1e-6);
+    for (const p of after.path) if (p.month < loanTerms.months) expect(p.balance).toBeLessThanOrEqual(p.cover! + 1e-6);
   });
   it('checks and caps everything a visitor sends', () => {
     const board = createBidBoard();

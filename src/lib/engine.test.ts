@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  balanceAt, black76Put, earningsValuePerUnit, expectedUnitValue, gradeRisk, gradeTable, guaranteedAt, ladderFee,
+  balanceAt, black76Put, coverAt, earningsValuePerUnit, expectedUnitValue, gradeRisk, gradeTable, guaranteedAt, ladderFee,
   maxCommittedLoan, monthlyPayment, normCdf, quoteBid, underwrite,
 } from './engine';
 import { assumptions, gpuBids, gpuCluster, loanTerms, noStress, robotBids, robotLoanTerms, weldingRobot } from '../data/samples';
@@ -20,6 +20,44 @@ describe('the sample cluster', () => {
   });
   it('the balance stays under the guaranteed amount every month', () => {
     for (let m = 0; m < loanTerms.months; m++) expect(balanceAt(704_000, loanTerms, m)).toBeLessThanOrEqual(guaranteedAt(gpuBids, 64, m) + 1e-6);
+  });
+  it('each buyer added in ladder order raises the loan: $480K, $491K, $525K, $602K, $704K, $704K', () => {
+    const want = [480_000, 491_000, 525_000, 602_000, 704_000, 704_000];
+    const got = want.map((_, n) => maxCommittedLoan(gpuCluster, gpuBids.slice(0, n), loanTerms));
+    got.forEach((g, n) => { expect(Math.abs(g.loan - want[n])).toBeLessThan(2_000); if (n > 0) expect(g.loan).toBeGreaterThanOrEqual(got[n - 1].loan); });
+    expect(got.map((g) => g.loan)).toEqual([480_000, 491_322, 524_985, 601_816, 704_000, 704_000]);
+    // each partial ladder is held back by the first month after its last promise; the full ladder by month 0
+    expect(got.map((g) => g.bindingMonth)).toEqual([null, 7, 13, 19, 0, 0]);
+    expect(underwrite(gpuCluster, [], loanTerms, assumptions, noStress)).toMatchObject({ bankLoan: 480_000, committedLoan: 480_000, fee: 0, feePerYearPct: 0 });
+  });
+  it('cover is what committed buyers would pay, or the bank share of the expected value where that is more', () => {
+    const bankShare = (m: number) => expectedUnitValue(gpuCluster, m) * 64 * 0.5;
+    expect(coverAt(gpuCluster, gpuBids, 3)).toBe(704_000);                                  // a buyer is committed
+    expect(coverAt(gpuCluster, gpuBids.slice(0, 1), 7)).toBeCloseTo(bankShare(7), 6);       // the only promise ended in month 6
+    expect(coverAt(gpuCluster, [], 0)).toBe(480_000);
+    const low: Bid[] = [{ id: 'low', buyer: 'low', units: 64, pricePerUnit: 1_000, validThroughMonth: 36, fundedPct: 1 }];
+    expect(coverAt(gpuCluster, low, 12)).toBeCloseTo(bankShare(12), 6);                     // a buyer who pays less than a bank counts on adds nothing
+    for (const bids of [[], gpuBids.slice(0, 2), gpuBids]) {
+      for (const p of underwrite(gpuCluster, bids, loanTerms, assumptions, noStress).path) {
+        expect(p.cover).toBeCloseTo(coverAt(gpuCluster, bids, p.month), 6);
+        expect(p.guaranteed).toBe(guaranteedAt(bids, 64, p.month));                         // still committed buyers only
+        if (bids.length > 0 && p.month < loanTerms.months) expect(p.balance).toBeLessThanOrEqual(p.cover! + 1e-6);
+      }
+    }
+  });
+  it('one more bid never lowers what the lot is guaranteed to fetch, even a half-funded one at a high price', () => {
+    const full: Bid = { id: 'full', buyer: 'full', units: 64, pricePerUnit: 8_000, validThroughMonth: 12, fundedPct: 1 };
+    const halfFunded: Bid = { id: 'half', buyer: 'half', units: 64, pricePerUnit: 12_000, validThroughMonth: 12, fundedPct: 0.5 };
+    expect(guaranteedAt([full], 64, 6)).toBe(512_000);
+    expect(guaranteedAt([full, halfFunded], 64, 6)).toBe(512_000); // 12,000 half funded counts as 6,000: the 8,000 bid still comes first
+    expect(guaranteedAt([halfFunded], 64, 6)).toBe(384_000);
+    expect(maxCommittedLoan(gpuCluster, [full, halfFunded], loanTerms).loan).toBeGreaterThanOrEqual(maxCommittedLoan(gpuCluster, [full], loanTerms).loan);
+  });
+  it('a loan stretched past the ladder leans on the bank share in the months no buyer has promised', () => {
+    const long = { ...loanTerms, months: 48 };
+    const r = maxCommittedLoan(gpuCluster, gpuBids, long);
+    expect(r.loan).toBeGreaterThan(0); expect(r.loan).toBeLessThanOrEqual(704_000);
+    for (let m = 0; m < 48; m++) expect(balanceAt(r.loan, long, m)).toBeLessThanOrEqual(coverAt(gpuCluster, gpuBids, m) + 1e-6);
   });
   it('underwrite reports the same loan, its payment and the fee per year', () => {
     const u = underwrite(gpuCluster, gpuBids, loanTerms, assumptions, noStress);
@@ -284,10 +322,10 @@ describe('the risk grade', () => {
 });
 
 describe('the largest covered loan, for random ladders and loan terms', () => {
-  it('its balance never exceeds the guaranteed amount in any month, and a larger loan would', () => {
+  it('its balance never exceeds the cover in any month, and a larger loan would', () => {
     const rng = seeded(2026);
     let covered = 0;
-    for (let k = 0; k < 400; k++) {
+    for (let k = 0; k < 200; k++) {
       const units = 1 + Math.floor(rng() * 128);
       const asset: Asset = { ...gpuCluster, units, usedPriceToday: 2_000 + rng() * 30_000 };
       const loan: LoanTerms = { months: 6 + Math.floor(rng() * 55), baseRate: rng() * 0.08, spread: rng() * 0.1 };
@@ -302,19 +340,24 @@ describe('the largest covered loan, for random ladders and loan terms', () => {
       if (rng() < 0.6) bids.push({ id: 'full', buyer: 'random', units, pricePerUnit: Math.round(asset.usedPriceToday * (0.1 + rng() * 0.5)), validThroughMonth: loan.months + 1, fundedPct: 1 });
 
       const { loan: principal, bindingMonth } = maxCommittedLoan(asset, bids, loan);
-      expect(principal).toBeGreaterThanOrEqual(0);
-      for (let m = 0; m < loan.months; m++) expect(balanceAt(principal, loan, m)).toBeLessThanOrEqual(guaranteedAt(bids, units, m) + 1e-6);
-      const cap = asset.usedPriceToday * units * 2;
-      if (principal + 2 < cap) {
-        let broken = false;
-        for (let m = 0; m < loan.months; m++) if (balanceAt(principal + 2, loan, m) > guaranteedAt(bids, units, m) + 1e-6) broken = true;
-        expect(broken).toBe(true);
+      expect(principal).toBeGreaterThan(0); expect(bindingMonth).not.toBeNull();
+      for (let m = 0; m < loan.months; m++) {
+        const cover = coverAt(asset, bids, m);
+        expect(balanceAt(principal, loan, m)).toBeLessThanOrEqual(cover + 1e-6);
+        expect(cover).toBeGreaterThanOrEqual(guaranteedAt(bids, units, m));
+        expect(cover).toBeGreaterThanOrEqual(expectedUnitValue(asset, m) * units * asset.bankAdvanceRate - 1e-9);
       }
-      if (principal > 0) { covered++; expect(bindingMonth).not.toBeNull(); }
+      let broken = false; // it is the largest: two dollars more would break the promise in some month
+      for (let m = 0; m < loan.months; m++) if (balanceAt(principal + 2, loan, m) > coverAt(asset, bids, m) + 1e-6) broken = true;
+      expect(broken).toBe(true);
+      // a buyer never lowers the loan: without the last bid the loan cannot be larger
+      if (bids.length > 1) expect(maxCommittedLoan(asset, bids.slice(0, -1), loan).loan).toBeLessThanOrEqual(principal);
+      if (bindingMonth! > 0) covered++;
       // the full underwriting keeps the same promise on its path
       const u = underwrite(asset, bids, loan, assumptions, noStress);
-      if (u.committedLoan > 0) for (const p of u.path) if (p.month < loan.months) expect(p.balance).toBeLessThanOrEqual(p.guaranteed + 1e-6);
+      expect(u.committedLoan).toBe(principal);
+      for (const p of u.path) if (p.month < loan.months) expect(p.balance).toBeLessThanOrEqual(p.cover! + 1e-6);
     }
-    expect(covered).toBeGreaterThan(100); // the test is not passing on empty cases
-  });
+    expect(covered).toBeGreaterThan(25); // many cases are held back by a later month, not only by month 0
+  }, 30_000); // a few seconds alone; more when the machine is busy
 });

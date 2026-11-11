@@ -1,6 +1,6 @@
 // One place for everything the three views share: the machines, the bid board, the loan, the stress, prices and records.
 // Every dollar is recomputed by the engine on each change; this file only holds inputs and talks to the server.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { gradeRisk, underwrite } from '../lib/engine';
 import type {
   Analysis, Asset, AssetKind, Assumptions, Bid, BidBook, BidInput, LeadInput, LoanTerms, PriceFeed, RiskGrade, Stress, Underwriting,
@@ -15,6 +15,9 @@ const SAMPLE_BIDS: ByKind<Bid[]> = { gpu: gpuBids, robot: robotBids };
 const SAMPLE_LOANS: ByKind<LoanTerms> = { gpu: loanTerms, robot: robotLoanTerms };
 const TOKEN_KEY = 'bid-tokens';
 const LOCAL = 'local';
+
+/** Ladder order: the earliest window first. */
+export const ladderOrder = (a: Bid, z: Bid) => a.validThroughMonth - z.validThroughMonth || z.pricePerUnit - a.pricePerUnit;
 
 function readTokens(): Record<string, string> {
   try {
@@ -46,11 +49,14 @@ function errorText(data: unknown, fallback: string): string {
 /** 'shared': the server's bid board. 'local': the board is unreachable, so bids live in this browser only. */
 export type BoardMode = 'loading' | 'shared' | 'local';
 export type LoadState = 'idle' | 'loading' | 'error';
+/** A bid that someone else just posted to the shared board. */
+export interface BidNotice { bid: Bid; kind: AssetKind; at: number }
 
 export interface Store {
   kind: AssetKind;
   setKind: (k: AssetKind) => void;
   asset: Asset;
+  /** The bids this browser counts: the shared board minus any sample buyers hidden here. */
   bids: Bid[];
   loan: LoanTerms;
   assumptions: Assumptions;
@@ -65,11 +71,22 @@ export interface Store {
   ownBid: (id: string) => boolean;
   postBid: (b: Omit<BidInput, 'asset'>) => Promise<Bid>;
   removeBid: (id: string) => Promise<void>;
+  /** Bids hidden in this browser ("Start with no buyers"); nothing is deleted on the server. */
+  hiddenCount: number;
+  nextSample: Bid | null;
+  startEmpty: () => void;
+  addNextSample: () => void;
+  showAll: () => void;
+  notice: BidNotice | null;
   prices: PriceFeed | null;
   pricesFailed: boolean;
   analysis: Analysis | null;
   analysisLoad: LoadState;
   analysisError: string;
+  /** The CSV the analysis read, so the page can show the rows it points to. */
+  recordsCsv: string | null;
+  /** Counts finished reads, so the page can replay the reading once per read. */
+  readCount: number;
   readSampleRecords: () => void;
   readRecordsFile: (f: File) => void;
   grade: RiskGrade | null;
@@ -90,14 +107,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [assets, setAssets] = useState(SAMPLE_ASSETS);
   const [loans, setLoans] = useState(SAMPLE_LOANS);
   const [books, setBooks] = useState(SAMPLE_BIDS);
+  const [hidden, setHidden] = useState<ByKind<string[]>>({ gpu: [], robot: [] });
   const [stressBase, setStressBase] = useState<Stress>(noStress);
   const [board, setBoard] = useState<BoardMode>('loading');
   const [tokens, setTokens] = useState<Record<string, string>>(readTokens);
+  const [notice, setNotice] = useState<BidNotice | null>(null);
+  const tokensRef = useRef(tokens);
+  tokensRef.current = tokens;
+  const knownRef = useRef<ByKind<Set<string> | null>>({ gpu: null, robot: null });
   const assumptions = sampleAssumptions;
 
   const asset = assets[kind];
   const loan = loans[kind];
-  const bids = books[kind];
+  const allBids = books[kind];
+  const hiddenIds = hidden[kind];
+  const bids = useMemo(() => allBids.filter((b) => !hiddenIds.includes(b.id)), [allBids, hiddenIds]);
+  const hiddenBids = useMemo(() => allBids.filter((b) => hiddenIds.includes(b.id)).sort(ladderOrder), [allBids, hiddenIds]);
+  const hiddenSamples = useMemo(() => hiddenBids.filter((b) => b.sample), [hiddenBids]);
   const stress = useMemo<Stress>(
     () => ({ ...stressBase, chipShipsMonth: stressBase.chipShipsMonth === null ? null : Math.min(stressBase.chipShipsMonth, loan.months) }),
     [stressBase, loan.months],
@@ -111,6 +137,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const book = (await r.json()) as BidBook;
       if (!book || !Array.isArray(book.bids)) throw new Error('unexpected board');
+      const known = knownRef.current[k];
+      if (known) {
+        const fresh = book.bids.filter((b) => !known.has(b.id) && !b.sample && !tokensRef.current[b.id]);
+        const last = fresh[fresh.length - 1];
+        if (last) setNotice({ bid: last, kind: k, at: Date.now() });
+      }
+      knownRef.current[k] = new Set(book.bids.map((b) => b.id));
       setBooks((s) => (JSON.stringify(s[k]) === JSON.stringify(book.bids) ? s : { ...s, [k]: book.bids }));
       setBoard('shared');
     } catch {
@@ -123,6 +156,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const t = window.setInterval(() => void refreshBoard(kind), 10_000);
     return () => window.clearInterval(t);
   }, [kind, refreshBoard]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 6_000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
 
   const postBid = useCallback(
     async (b: Omit<BidInput, 'asset'>): Promise<Bid> => {
@@ -137,6 +176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const raw = (data.bid ?? data) as Bid & { token?: string };
         const token = (typeof data.token === 'string' ? data.token : raw.token) as string | undefined;
         const { token: _secret, ...bid } = raw;
+        knownRef.current[kind]?.add(bid.id);
         if (token) {
           setTokens((t) => {
             const next = { ...t, [bid.id]: token };
@@ -184,6 +224,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const ownBid = useCallback((id: string) => Boolean(tokens[id]), [tokens]);
 
+  // --- sample buyers, one at a time -----------------------------------------------------------------------------
+  // "Start with no buyers" hides every bid on the board in this browser, so the climb starts from the bank's number;
+  // "Add a buyer" brings the sample buyers back in ladder order. Bids posted after that show up as they arrive.
+  const startEmpty = useCallback(() => setHidden((h) => ({ ...h, [kind]: books[kind].map((b) => b.id) })), [books, kind]);
+  const addNextSample = useCallback(() => {
+    const next = hiddenSamples[0];
+    if (next) setHidden((h) => ({ ...h, [kind]: h[kind].filter((id) => id !== next.id) }));
+  }, [hiddenSamples, kind]);
+  const showAll = useCallback(() => setHidden((h) => ({ ...h, [kind]: [] })), [kind]);
+
   // --- live prices ----------------------------------------------------------------------------------------------
   const [prices, setPrices] = useState<PriceFeed | null>(null);
   const [pricesFailed, setPricesFailed] = useState(false);
@@ -215,21 +265,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [analysisLoad, setAnalysisLoad] = useState<LoadState>('idle');
   const [analysisError, setAnalysisError] = useState('');
-  const analyze = useCallback(async (body: { csv?: string }) => {
+  const [recordsCsv, setRecordsCsv] = useState<string | null>(null);
+  const [readCount, setReadCount] = useState(0);
+  const analyze = useCallback(async (body: { csv?: string }, csvText: Promise<string | null>) => {
     setAnalysisLoad('loading');
     setAnalysisError('');
     try {
-      const r = await fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const [r, text] = await Promise.all([
+        fetch('/api/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+        csvText,
+      ]);
       const data = (await r.json().catch(() => null)) as Analysis | null;
       if (!r.ok || !data || !Array.isArray(data.flags) || !data.summary) throw new Error(errorText(data, 'Could not read those records.'));
       setAnalysis(data);
+      setRecordsCsv(text);
+      setReadCount((n) => n + 1);
       setAnalysisLoad('idle');
     } catch (e) {
       setAnalysisError(e instanceof Error ? e.message : 'Could not read those records.');
       setAnalysisLoad('error');
     }
   }, []);
-  const readSampleRecords = useCallback(() => void analyze({}), [analyze]);
+  const readSampleRecords = useCallback(() => {
+    const csv = fetch('/api/sample-records')
+      .then((r) => (r.ok ? r.text() : null))
+      .catch(() => null);
+    void analyze({}, csv);
+  }, [analyze]);
   const readRecordsFile = useCallback(
     (f: File) => {
       if (f.size > 2_000_000) {
@@ -238,7 +300,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return;
       }
       f.text().then(
-        (csv) => analyze({ csv }),
+        (csv) => analyze({ csv }, Promise.resolve(csv)),
         () => {
           setAnalysisError('Could not open that file.');
           setAnalysisLoad('error');
@@ -279,8 +341,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     kind, setKind, asset, bids, loan, assumptions, stress, u,
     patchAsset, patchLoan, patchStress, setChipMonth, resetAssumptions,
     board, ownBid, postBid, removeBid,
+    hiddenCount: hiddenBids.length, nextSample: hiddenSamples[0] ?? null, startEmpty, addNextSample, showAll,
+    notice,
     prices, pricesFailed,
-    analysis, analysisLoad, analysisError, readSampleRecords, readRecordsFile, grade, gradeWithoutBids,
+    analysis, analysisLoad, analysisError, recordsCsv, readCount, readSampleRecords, readRecordsFile, grade, gradeWithoutBids,
     sendLead,
   };
   return <Ctx.Provider value={store}>{children}</Ctx.Provider>;

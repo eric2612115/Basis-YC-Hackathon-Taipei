@@ -1,11 +1,13 @@
 // Borrow: the path a lender walks, from the machines to a letter the owner can send to a bank tomorrow.
-import { useRef, type ReactNode } from 'react';
-import type { RiskGrade, StressOutcome, Underwriting } from '../lib/types';
+import type { ReactNode } from 'react';
+import type { StressOutcome, Underwriting } from '../lib/types';
 import { useStore } from './store';
-import { Legend, LoanChart } from './Chart';
+import { hasCoverLine, Legend, LoanChart } from './Chart';
 import { BidList } from './Bids';
 import { LeadForm, Letter } from './Letter';
+import { Records } from './Records';
 import { NumberField } from './fields';
+import { useCountUp } from './hooks';
 import { cap, clock, pct, plural, usd, usdShort } from './format';
 
 function Step({ n, title, line, children }: { n: number; title: string; line: ReactNode; children?: ReactNode }) {
@@ -23,10 +25,18 @@ function Step({ n, title, line, children }: { n: number; title: string; line: Re
   );
 }
 
+/** A dollar figure that glides to each new value from the engine. */
+function CountUp({ value, className }: { value: number; className?: string }) {
+  const v = useCountUp(value);
+  return <div className={className}>{usdShort(v)}</div>;
+}
+
 export function Borrow() {
   const { kind, asset, bids, u, stress, prices, analysis } = useStore();
   const one = asset.units === 1;
   const things = one ? asset.unitLabel : `${asset.unitLabel}s`;
+  // With no committed buyers a lender lends what a bank lends; the engine reports 0 for the committed loan then.
+  const lendable = bids.length && u.committedLoan > 0 ? u.committedLoan : u.bankLoan;
 
   const machinesLine =
     kind === 'gpu' ? (
@@ -42,8 +52,8 @@ export function Borrow() {
   const bankLine = `A bank lends ${pct(asset.bankAdvanceRate)} of today's resale value, because it can't tell what the ${things} will sell for later.`;
 
   const buyersLine = bids.length
-    ? `Buyers have committed to pay set prices for ${one ? 'this' : 'these'} ${things}, month by month. The loan never owes more than they will pay, so a lender can lend ${usdShort(u.committedLoan)}.`
-    : 'No committed buyers yet. Add one on Buy.';
+    ? `${plural(bids.length, 'buyer')} ${bids.length === 1 ? 'has' : 'have'} committed to buy at set prices. Each one raises what a lender can lend: now ${usdShort(lendable)}.`
+    : `No buyers yet, so a lender lends what a bank lends: ${usdShort(u.bankLoan)}.`;
 
   return (
     <div className="view">
@@ -72,14 +82,15 @@ export function Borrow() {
           </div>
           <div className="figure accent">
             <div className="label">With committed buyers</div>
-            <div className="big num">{bids.length ? usdShort(u.committedLoan) : '—'}</div>
+            <CountUp className="big num" value={lendable} />
             <div className="sub">
               {bids.length ? (
                 <>
-                  Buyers' fee {usdShort(u.fee)} · {pct(u.feePerYearPct, 1)} of the loan a year
+                  Buyers' fee {usdShort(u.fee)}
+                  {u.feePerYearPct > 0 && <> · {pct(u.feePerYearPct, 1)} of the loan a year</>}
                 </>
               ) : (
-                <a href="#/buy">Add a committed buyer</a>
+                'No buyers yet'
               )}
             </div>
           </div>
@@ -91,9 +102,9 @@ export function Borrow() {
           units={asset.units}
           unitLabel={asset.unitLabel}
           chipMonth={stress.chipShipsMonth}
-          bindingMonth={u.bindingMonth}
+          bindingMonth={bids.length ? u.bindingMonth : null}
         />
-        <Legend stressed={stress.chipShipsMonth !== null} />
+        <Legend ladder={bids.length > 0} cover={hasCoverLine(u.path)} stressed={stress.chipShipsMonth !== null} />
       </Step>
 
       <Step n={4} title="Ship a new chip" line={stressLine(stress.chipShipsMonth, u.stress, things, stress.rentDrop, stress.priceDrop)}>
@@ -106,6 +117,7 @@ export function Borrow() {
       </Step>
 
       <AssumptionsPanel />
+      <BuyerNotice />
     </div>
   );
 }
@@ -178,111 +190,39 @@ function LivePrice() {
   );
 }
 
-function Records() {
-  const { analysis, analysisLoad, analysisError, readSampleRecords, readRecordsFile, grade, gradeWithoutBids } = useStore();
-  const file = useRef<HTMLInputElement>(null);
-  const busy = analysisLoad === 'loading';
-  return (
-    <div className="records">
-      <div className="records-head">
-        <h3>What the records say</h3>
-        <div className="actions">
-          <button type="button" className="btn" onClick={readSampleRecords} disabled={busy}>
-            {analysis ? 'Read the sample again' : 'Read the sample records'}
-          </button>
-          <button type="button" className="btn ghost" onClick={() => file.current?.click()} disabled={busy}>
-            Upload a CSV
-          </button>
-          <input
-            ref={file}
-            type="file"
-            accept=".csv,text/csv"
-            hidden
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) readRecordsFile(f);
-              e.currentTarget.value = '';
-            }}
-          />
-        </div>
-      </div>
-      {busy && <p className="meta reading">Reading the records…</p>}
-      {analysisLoad === 'error' && <p className="meta bad-text">{analysisError}</p>}
-      {!analysis && !busy && analysisLoad !== 'error' && (
-        <p className="meta">The cluster's rental records. The AI flags what a lender should worry about, with the rows it read.</p>
-      )}
-      {analysis && !busy && (
-        <div className="records-grid">
-          <div>
-            <ul className="flags">
-              {analysis.flags.map((f, i) => (
-                <li key={f.id} style={{ animationDelay: `${i * 140}ms` }}>
-                  <span className={`sev ${f.severity}`} aria-label={`${f.severity} concern`} />
-                  <div>
-                    <b>{f.title}</b>
-                    <p>{f.detail}</p>
-                    {f.rows.length > 0 && <small>{f.rows.length === 1 ? 'Row' : 'Rows'} {f.rows.join(', ')}</small>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {analysis.memo && <p className="memo">{analysis.memo}</p>}
-            <p className="meta source">
-              {analysis.source === 'model'
-                ? `Read by ${analysis.model ?? 'the model'} just now.`
-                : analysis.source === 'rules'
-                  ? 'Checked by rules.'
-                  : 'Sample records, read ahead of time.'}
-            </p>
-          </div>
-          {grade && <GradeCard g={grade} without={gradeWithoutBids} />}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GradeCard({ g, without }: { g: RiskGrade; without: RiskGrade | null }) {
-  const parts: [string, number][] = [
-    ['Industry', g.parts.industry],
-    ['Stability', g.parts.stability],
-    ['Counterparty', g.parts.counterparty],
-    ['Redeployable', g.parts.redeploy],
-  ];
-  return (
-    <div className="grade">
-      <div className="label">Risk grade</div>
-      <div className="grade-row">
-        <span className="big num">{g.grade}</span>
-        <span className="meta">{Math.round(g.score)} / 100</span>
-      </div>
-      {without && without.grade !== g.grade && <p className="meta">{without.grade} without committed buyers</p>}
-      <ul className="bars">
-        {parts.map(([k, v]) => (
-          <li key={k}>
-            <span>{k}</span>
-            <span className="track">
-              <i style={{ width: `${Math.max(0, Math.min(100, v))}%` }} />
-            </span>
-            <b>{Math.round(v)}</b>
-          </li>
-        ))}
-      </ul>
-      <p className="grade-reason">{g.reason}</p>
-      <p className="meta">Spread {pct(g.spread, 1)} a year</p>
-    </div>
-  );
-}
-
 function BidLadder() {
-  const { bids, ownBid } = useStore();
-  if (!bids.length) return null;
+  const { bids, ownBid, nextSample, hiddenCount, startEmpty, addNextSample, showAll } = useStore();
+  const anySample = bids.some((b) => b.sample);
   return (
     <div className="ladder">
-      <BidList bids={bids} own={ownBid} limit={6} />
-      <a className="btn ghost add" href="#/buy">
-        Add a buyer
-      </a>
+      {bids.length > 0 && <BidList bids={bids} own={ownBid} limit={6} />}
+      <div className="ladder-actions">
+        {nextSample ? (
+          <button type="button" className="btn ghost" onClick={addNextSample}>
+            Add a buyer
+          </button>
+        ) : (
+          <a className="btn ghost" href="#/buy">
+            Add a buyer
+          </a>
+        )}
+        {hiddenCount > 0 ? (
+          <>
+            <button type="button" className="link" onClick={showAll}>
+              Show all buyers
+            </button>
+            <a className="link" href="#/buy">
+              Post your own
+            </a>
+          </>
+        ) : (
+          anySample && (
+            <button type="button" className="link" onClick={startEmpty}>
+              Start with no buyers
+            </button>
+          )
+        )}
+      </div>
     </div>
   );
 }
@@ -347,6 +287,22 @@ function Outcome({ title, o }: { title: string; o: StressOutcome }) {
           </div>
         </dl>
       )}
+    </div>
+  );
+}
+
+/** Someone else just committed on the shared board: say who, for a few seconds. */
+function BuyerNotice() {
+  const { notice, kind, asset } = useStore();
+  if (!notice || notice.kind !== kind) return null;
+  const b = notice.bid;
+  return (
+    <div className="notice" role="status" key={notice.at}>
+      <i className="dot on" aria-hidden="true" />
+      <span>
+        <b>{b.buyer}</b> committed to buy {b.units} {b.units === 1 ? asset.unitLabel : `${asset.unitLabel}s`} at {usd(b.pricePerUnit)}, until month{' '}
+        {b.validThroughMonth}.
+      </span>
     </div>
   );
 }

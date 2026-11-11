@@ -1,5 +1,5 @@
 // Hand-written SVG charts. They draw numbers from the engine and the price feed; they do not compute money.
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { Bid, MonthPoint } from '../lib/types';
 import { useWidth } from './hooks';
 import { clock, usd, usdShort } from './format';
@@ -33,6 +33,11 @@ export function ladderRuns(path: MonthPoint[], bids: Bid[], units: number): Ladd
   return runs.filter((r) => r.value > 0);
 }
 
+/** True when the engine reports a lender's cover above the committed steps in some month. */
+export function hasCoverLine(path: MonthPoint[]): boolean {
+  return path.some((p) => p.cover !== undefined && p.cover > p.guaranteed + 1);
+}
+
 interface LoanChartProps {
   path: MonthPoint[];
   bids: Bid[];
@@ -50,7 +55,7 @@ export function LoanChart({ path, bids, units, unitLabel, chipMonth, bindingMont
   const H = narrow ? 260 : 360;
   const pad = { l: narrow ? 46 : 58, r: 14, t: 30, b: 28 };
   const last = path.length ? path[path.length - 1].month : 1;
-  const maxV = Math.max(1, ...path.map((p) => Math.max(p.guaranteed, p.balance, p.expectedValue)));
+  const maxV = Math.max(1, ...path.map((p) => Math.max(p.guaranteed, p.balance, p.expectedValue, p.cover ?? 0)));
   const step = niceStep(maxV / 4);
   const top = Math.ceil((maxV * 1.04) / step) * step;
   const x = (m: number) => pad.l + (m / (last || 1)) * (W - pad.l - pad.r);
@@ -66,21 +71,39 @@ export function LoanChart({ path, bids, units, unitLabel, chipMonth, bindingMont
     xTicks.push(last);
   }
 
-  let steps = '';
-  path.forEach((p, i) => {
-    steps += i === 0 ? `M${x(p.month)},${y(p.guaranteed)}` : `H${x(p.month)}V${y(p.guaranteed)}`;
-  });
-  const hasLadder = path.some((p) => p.guaranteed > 0);
   const line = (pick: (p: MonthPoint) => number) => path.map((p, i) => `${i ? 'L' : 'M'}${x(p.month)},${y(pick(p))}`).join('');
+  const balance = line((p) => p.balance);
+
+  // The committed ladder: one keyed piece per step and per drop, so a new buyer draws in only the part that changed.
+  const runs = ladderRuns(path, bids, units);
+  const end = (r: LadderRun) => x(Math.min(r.to + 1, last));
+  const drops: { key: string; d: string }[] = [];
+  for (let i = 0; i + 1 < runs.length; i++) {
+    const a = runs[i];
+    const b = runs[i + 1];
+    if (b.from === a.to + 1) drops.push({ key: `v${b.from}-${Math.round(a.value)}-${Math.round(b.value)}`, d: `M${x(b.from)},${y(a.value)}V${y(b.value)}` });
+  }
+
+  // What a lender can count on where no buyer is committed: the bank's share of the expected value.
+  let cover = '';
+  let open = false;
+  let coverStart: MonthPoint | null = null;
+  for (const p of path) {
+    if (p.cover !== undefined && p.cover > p.guaranteed + 1) {
+      cover += `${open ? 'L' : 'M'}${x(p.month)},${y(p.cover)}`;
+      if (!coverStart) coverStart = p;
+      open = true;
+    } else open = false;
+  }
 
   let stressed = '';
   if (chipMonth !== null) {
     const after = path.filter((p) => p.month >= chipMonth);
     if (after.length) stressed = `M${x(after[0].month)},${y(after[0].expectedValue)}` + after.map((p) => `L${x(p.month)},${y(p.stressedValue)}`).join('');
   }
-  const runs = ladderRuns(path, bids, units);
   const bind = bindingMonth !== null ? path.find((p) => p.month === bindingMonth) : undefined;
   const chipX = chipMonth !== null ? x(chipMonth) : 0;
+  const glide = { d: `path("${balance}")`, transition: 'd 600ms cubic-bezier(.2,.7,.2,1)' } as CSSProperties;
 
   return (
     <div className="chart" ref={ref}>
@@ -96,11 +119,41 @@ export function LoanChart({ path, bids, units, unitLabel, chipMonth, bindingMont
             {m === last ? `${m} mo` : m}
           </text>
         ))}
-        {hasLadder && <path d={`${steps}V${y(0)}H${x(0)}Z`} fill="#d2b06a" opacity={0.13} />}
+        {runs.map((r) => (
+          <rect
+            key={`f${r.from}-${r.to}-${Math.round(r.value)}`}
+            className="fade-in"
+            x={x(r.from)}
+            y={y(r.value)}
+            width={Math.max(0, end(r) - x(r.from))}
+            height={Math.max(0, y(0) - y(r.value))}
+            fill="#d2b06a"
+            opacity={0.13}
+          />
+        ))}
         <path d={line((p) => p.expectedValue)} fill="none" stroke="#a6a6a6" strokeWidth={1.25} />
+        {cover && <path d={cover} fill="none" stroke="#8f8f8f" strokeWidth={1.25} strokeDasharray="4 4" />}
+        {cover && coverStart && runs.length === 0 && (
+          <text className="cover-label" x={x(coverStart.month) + 6} y={y(coverStart.cover ?? 0) - 10}>
+            Bank's share of the expected value
+          </text>
+        )}
         {stressed && <path d={stressed} fill="none" stroke="#e5493d" strokeWidth={1.75} strokeDasharray="5 4" />}
-        {hasLadder && <path d={steps} fill="none" stroke="#d2b06a" strokeWidth={3} />}
-        <path d={line((p) => p.balance)} fill="none" stroke="#111111" strokeWidth={2.25} strokeLinejoin="round" />
+        {drops.map((s) => (
+          <path key={s.key} className="draw" pathLength={1} d={s.d} fill="none" stroke="#d2b06a" strokeWidth={3} />
+        ))}
+        {runs.map((r) => (
+          <path
+            key={`h${r.from}-${r.to}-${Math.round(r.value)}`}
+            className="draw"
+            pathLength={1}
+            d={`M${x(r.from)},${y(r.value)}H${end(r)}`}
+            fill="none"
+            stroke="#d2b06a"
+            strokeWidth={3}
+          />
+        ))}
+        <path d={balance} style={glide} fill="none" stroke="#111111" strokeWidth={2.25} strokeLinejoin="round" />
         {bind && <circle cx={x(bind.month)} cy={y(bind.balance)} r={4.5} fill="#111111" stroke="#ffffff" strokeWidth={2} />}
         {chipMonth !== null && (
           <g>
@@ -112,7 +165,7 @@ export function LoanChart({ path, bids, units, unitLabel, chipMonth, bindingMont
         )}
         {runs.map((r) => {
           const x0 = x(r.from);
-          const x1 = x(Math.min(r.to + 1, last));
+          const x1 = end(r);
           const text = r.unitPrice !== null ? usdShort(r.unitPrice) + (narrow ? '' : `/${unitLabel}`) : usdShort(r.value);
           const w = text.length * 6.6;
           if (x1 - x0 < w + 6) return null;
@@ -125,7 +178,7 @@ export function LoanChart({ path, bids, units, unitLabel, chipMonth, bindingMont
             else if (left - w / 2 >= x0) cx = left;
           }
           return (
-            <text key={r.from} className="step-label" x={cx} y={y(r.value) - 8} textAnchor="middle">
+            <text key={`t${r.from}-${Math.round(r.value)}`} className="step-label fade-in" x={cx} y={y(r.value) - 8} textAnchor="middle">
               {text}
             </text>
           );
@@ -135,10 +188,11 @@ export function LoanChart({ path, bids, units, unitLabel, chipMonth, bindingMont
   );
 }
 
-export function Legend({ stressed }: { stressed: boolean }) {
+export function Legend({ ladder, cover, stressed }: { ladder: boolean; cover: boolean; stressed: boolean }) {
   return (
     <div className="legend">
-      <span><i className="sw brass" />Guaranteed resale price</span>
+      {ladder && <span><i className="sw brass" />Guaranteed resale price</span>}
+      {cover && <span><i className="sw dash" />Bank's share of the expected value</span>}
       <span><i className="sw ink" />Loan balance</span>
       <span><i className="sw grey" />Expected resale value</span>
       {stressed && <span><i className="sw red" />After a new chip</span>}

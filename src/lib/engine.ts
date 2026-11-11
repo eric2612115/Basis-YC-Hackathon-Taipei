@@ -24,11 +24,14 @@ export function balanceAt(principal: number, loan: LoanTerms, month: number): nu
 /** One slice of the lot that a committed buyer takes in a given month: how many units, and the funded price per unit. */
 interface Offer { units: number; price: number }
 
-/** The bids that are valid in `month`, best prices first, cut off at `units`. */
+/**
+ * The bids that are valid in `month`, best funded prices first, cut off at `units`.
+ * Ordering by the funded price means one more bid can never lower what the lot is guaranteed to fetch.
+ */
 function offersAt(bids: Bid[], units: number, month: number): Offer[] {
   const out: Offer[] = [];
   let left = units;
-  for (const b of bids.filter((x) => month <= x.validThroughMonth).sort((a, z) => z.pricePerUnit - a.pricePerUnit)) {
+  for (const b of bids.filter((x) => month <= x.validThroughMonth).sort((a, z) => z.pricePerUnit * z.fundedPct - a.pricePerUnit * a.fundedPct)) {
     const take = Math.min(left, b.units);
     if (take > 0) out.push({ units: take, price: b.pricePerUnit * b.fundedPct });
     left -= take;
@@ -37,7 +40,7 @@ function offersAt(bids: Bid[], units: number, month: number): Offer[] {
   return out;
 }
 
-/** What committed buyers would pay for the whole lot in `month`: best prices first, funded part only, up to `units`. */
+/** What committed buyers would pay for the whole lot in `month`: best funded prices first, funded part only, up to `units`. */
 export function guaranteedAt(bids: Bid[], units: number, month: number): number {
   let total = 0;
   for (const o of offersAt(bids, units, month)) total += o.units * o.price;
@@ -45,17 +48,33 @@ export function guaranteedAt(bids: Bid[], units: number, month: number): number 
 }
 
 /** Expected resale value of one unit in `month`. */
-export const expectedUnitValue = (asset: Asset, month: number) => asset.usedPriceToday * Math.pow(1 - asset.depreciationPerYear, month / 12);
+export function expectedUnitValue(asset: Asset, month: number): number {
+  return asset.usedPriceToday * Math.pow(1 - asset.depreciationPerYear, month / 12);
+}
 
-/** The largest loan whose balance never rises above the guaranteed amount. */
+/**
+ * What a lender can count on in `month`: what committed buyers would pay, or, where no buyer is committed (or pays
+ * less), what a bank counts on, the bank's share of the expected resale value.
+ */
+export function coverAt(asset: Asset, bids: Bid[], month: number): number {
+  return Math.max(guaranteedAt(bids, asset.units, month), expectedUnitValue(asset, month) * asset.units * asset.bankAdvanceRate);
+}
+
+/**
+ * The largest loan whose balance never rises above the cover. Each buyer lifts the cover in the months of its promise,
+ * so each new buyer can raise the loan. With no bids it is the bank loan.
+ */
 export function maxCommittedLoan(asset: Asset, bids: Bid[], loan: LoanTerms): { loan: number; bindingMonth: number | null } {
-  if (bids.length === 0) return { loan: 0, bindingMonth: null };
-  const ok = (p: number) => { for (let m = 0; m < loan.months; m++) if (balanceAt(p, loan, m) > guaranteedAt(bids, asset.units, m) + 1e-6) return false; return true; };
-  let lo = 0, hi = asset.usedPriceToday * asset.units * 2;
+  if (bids.length === 0) return { loan: asset.usedPriceToday * asset.units * asset.bankAdvanceRate, bindingMonth: null };
+  const cover: number[] = [];
+  for (let m = 0; m < loan.months; m++) cover.push(coverAt(asset, bids, m));
+  if (cover.length === 0) return { loan: 0, bindingMonth: null };
+  const ok = (p: number) => { for (let m = 0; m < cover.length; m++) if (balanceAt(p, loan, m) > cover[m] + 1e-6) return false; return true; };
+  let lo = 0, hi = cover[0] + 1; // in month 0 the balance is the loan itself, so the loan cannot be above that month's cover
   for (let k = 0; k < 60; k++) { const mid = (lo + hi) / 2; if (ok(mid)) lo = mid; else hi = mid; }
-  const principal = Math.floor(lo); // round down, so the balance never sits above the guaranteed amount
+  const principal = Math.floor(lo); // round down, so the balance never sits above the cover
   let bindingMonth: number | null = null, best = Infinity;
-  for (let m = 0; m < loan.months; m++) { const gap = guaranteedAt(bids, asset.units, m) - balanceAt(principal, loan, m); if (gap < best) { best = gap; bindingMonth = m; } }
+  for (let m = 0; m < cover.length; m++) { const gap = cover[m] - balanceAt(principal, loan, m); if (gap < best) { best = gap; bindingMonth = m; } }
   return { loan: principal, bindingMonth };
 }
 
@@ -178,7 +197,7 @@ export function underwrite(asset: Asset, bids: Bid[], loan: LoanTerms, a: Assump
     const guaranteed = guaranteedAt(bids, asset.units, m);
     path.push({
       month: m, balance: balanceAt(principal, loan, m), guaranteed, expectedValue: ev,
-      cover: guaranteed > 0 ? guaranteed : ev * asset.bankAdvanceRate, // with no buyer committed, a lender counts on the bank's share
+      cover: coverAt(asset, bids, m), // committed buyers, or the bank's share of the expected value where that is more
       stressedValue: hit ? ev * (1 - stress.priceDrop) : ev,
       income: asset.units * (rate * asset.hoursPerMonth * util - asset.opexPerUnitMonth), payment: m < loan.months ? pay : 0,
     });
