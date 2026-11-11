@@ -1,8 +1,7 @@
 // Live H100 rental prices from two public sources, no keys. Owner: the backend conversation.
 // Listed prices, not trades. The reference price is the median of the sources.
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import type { PriceFeed, PriceSource } from '../src/lib/types';
+import { readJson, writeJson } from './store';
 
 export const RUNPOD_URL = 'https://api.runpod.io/graphql';
 export const RUNPOD_QUERY = 'query { gpuTypes { id displayName lowestPrice(input:{gpuCount:1}) { uninterruptablePrice } } }';
@@ -13,7 +12,7 @@ const USER_AGENT = 'h100-price-feed/0.1';
 const TIMEOUT_MS = 10_000;
 const REFRESH_MS = 60_000;
 const HISTORY_MS = 6 * 3_600_000;
-const MAX_TICKS = 10_000; // about a week at one tick a minute
+const MAX_TICKS = 2_880; // two days at one tick a minute; the page shows six hours
 
 export interface Quote { price: number; detail: string }
 export interface Tick { t: string; price: number; sources: Record<string, number> }
@@ -94,25 +93,12 @@ export function createPriceFeed(opts: PriceFeedOptions = {}) {
   let ticks: Tick[] = [];
   let timer: ReturnType<typeof setInterval> | null = null;
 
+  /** Read the ticks saved by an earlier run. A missing or broken file means: start empty. */
   async function load(): Promise<void> {
-    if (!file) return;
-    try {
-      const saved = JSON.parse(await fs.readFile(file, 'utf8'));
-      if (Array.isArray(saved)) {
-        const good = saved.filter((x): x is Tick => typeof x?.t === 'string' && typeof x?.price === 'number' && x.price > 0 && !Number.isNaN(Date.parse(x.t)));
-        ticks = [...good.map((x) => ({ t: x.t, price: x.price, sources: x.sources ?? {} })), ...ticks].sort((a, z) => Date.parse(a.t) - Date.parse(z.t)).slice(-MAX_TICKS);
-      }
-    } catch { /* no file yet, or not readable: start empty */ }
-  }
-
-  async function save(): Promise<void> {
-    if (!file) return;
-    try {
-      await fs.mkdir(path.dirname(file), { recursive: true });
-      const tmp = `${file}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(ticks));
-      await fs.rename(tmp, file);
-    } catch { /* a read-only disk must not stop the feed */ }
+    const saved = readJson<unknown>(file, []);
+    if (!Array.isArray(saved)) return;
+    const good = saved.filter((x): x is Tick => typeof x?.t === 'string' && typeof x?.price === 'number' && x.price > 0 && !Number.isNaN(Date.parse(x.t)));
+    ticks = [...good.map((x) => ({ t: x.t, price: x.price, sources: x.sources ?? {} })), ...ticks].sort((a, z) => Date.parse(a.t) - Date.parse(z.t)).slice(-MAX_TICKS);
   }
 
   /** Ask every source once. A source that fails keeps its last good value and its time. Returns how many answered. */
@@ -129,7 +115,7 @@ export function createPriceFeed(opts: PriceFeedOptions = {}) {
       const current = sources.map((s) => lastGood.get(s.name)).filter((x): x is PriceSource => !!x);
       ticks.push({ t, price: reference(current), sources: Object.fromEntries(current.map((s) => [s.name, s.price])) });
       if (ticks.length > MAX_TICKS) ticks = ticks.slice(-MAX_TICKS);
-      await save();
+      writeJson(file, ticks); // a disk that cannot be written does not stop the feed
     }
     return answered;
   }

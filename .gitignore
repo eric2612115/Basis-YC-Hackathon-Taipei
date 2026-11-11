@@ -2,5 +2,5 @@ node_modules
 dist
 .env
 .env.*
-data/ticks.json
+data/
 .DS_Store

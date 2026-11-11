@@ -175,8 +175,10 @@ export function underwrite(asset: Asset, bids: Bid[], loan: LoanTerms, a: Assump
     const hit = stress.chipShipsMonth !== null && m >= stress.chipShipsMonth;
     const rate = asset.ratePerHour * Math.pow(1 - asset.rentDeclinePerYear, m / 12) * (hit ? 1 - stress.rentDrop : 1);
     const util = asset.utilization * (hit ? 1 - stress.utilizationDrop : 1);
+    const guaranteed = guaranteedAt(bids, asset.units, m);
     path.push({
-      month: m, balance: balanceAt(principal, loan, m), guaranteed: guaranteedAt(bids, asset.units, m), expectedValue: ev,
+      month: m, balance: balanceAt(principal, loan, m), guaranteed, expectedValue: ev,
+      cover: guaranteed > 0 ? guaranteed : ev * asset.bankAdvanceRate, // with no buyer committed, a lender counts on the bank's share
       stressedValue: hit ? ev * (1 - stress.priceDrop) : ev,
       income: asset.units * (rate * asset.hoursPerMonth * util - asset.opexPerUnitMonth), payment: m < loan.months ? pay : 0,
     });
