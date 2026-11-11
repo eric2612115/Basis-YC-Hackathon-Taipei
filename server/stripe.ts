@@ -34,12 +34,14 @@ export function checkoutBody(input: CheckoutInput, origin: string): URLSearchPar
   body.set('mode', 'payment');
   body.set('success_url', `${origin}/?paid=1#/trade`);
   body.set('cancel_url', `${origin}/#/trade`);
+  body.set('locale', 'en');
+  body.set('adaptive_pricing[enabled]', 'false'); // always show US dollars, not the visitor's local currency
   body.set('line_items[0][quantity]', '1');
   body.set('line_items[0][price_data][currency]', 'usd');
   body.set('line_items[0][price_data][unit_amount]', String(feeCents(input)));
   body.set(
     'line_items[0][price_data][product_data][name]',
-    `Fee to the committed buyer: ${input.units} ${asset.unitLabel}${input.units === 1 ? '' : 's'} at $${input.pricePerUnit.toLocaleString('en-US')}, ${input.months} months`,
+    `Insurance: a $${input.pricePerUnit.toLocaleString('en-US')} floor on ${input.units === 1 ? 'one used' : input.units} ${asset.unitLabel}${input.units === 1 ? '' : 's'}, ${input.months} months`,
   );
   return body;
 }
