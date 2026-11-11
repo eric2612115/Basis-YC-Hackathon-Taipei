@@ -48,6 +48,7 @@ export interface MonthPoint {
   month: number;
   balance: number;        // loan still owed at the start of the month
   guaranteed: number;     // what committed buyers would pay for the whole lot this month
+  cover?: number;         // what a lender can count on this month: the guaranteed amount, or where no buyer is committed, the bank's share of the expected value
   expectedValue: number;  // expected resale value of the lot
   stressedValue: number;  // resale value of the lot under the stress (equals expectedValue with no stress)
   income: number;         // net income of the lot this month, under the stress
@@ -96,7 +97,8 @@ export interface RecordsSummary {
   topCustomerShare: number; contractedShare: number; latePayments: number; refunds: number; downtimeHours: number;
 }
 export interface Flag { id: string; severity: 'high' | 'medium' | 'low'; title: string; detail: string; rows: number[] }
-export interface Analysis { summary: RecordsSummary; flags: Flag[]; memo: string; source: 'model' | 'stored'; model?: string }
+/** source: 'model' = read by the model; 'stored' = the saved analysis of the sample; 'rules' = checked by rules in code, no model. */
+export interface Analysis { summary: RecordsSummary; flags: Flag[]; memo: string; source: 'model' | 'stored' | 'rules'; model?: string }
 
 export interface PriceSource { name: string; price: number; detail: string; asOf: string; url: string }
 export interface PriceFeed {

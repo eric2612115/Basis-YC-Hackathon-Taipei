@@ -24,7 +24,7 @@ Buyers who want used GPUs at a discount commit to a price today, and are paid a 
 |---|---|
 | A bank lends half of today's resale value | $480,000 |
 | With committed buyers, a lender can lend | $704,000 |
-| What the buyers charge for the whole ladder | $98,800, or 4.7% of the loan a year |
+| What the buyers charge for the whole ladder | $99,600, or 4.7% of the loan a year |
 | Risk grade | BB, rising to BBB with committed buyers |
 
 Every number comes from [`src/lib/engine.ts`](src/lib/engine.ts) and is checked by the tests.

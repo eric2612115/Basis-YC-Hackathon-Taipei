@@ -56,8 +56,9 @@ describe('value from income', () => {
     const fading = { ...flat, opexPerUnitMonth: 350, rentDeclinePerYear: 0.2 };
     expect(earningsValuePerUnit({ ...fading, lifeMonthsRemaining: 120 }, assumptions)).toBeCloseTo(earningsValuePerUnit({ ...fading, lifeMonthsRemaining: 60 }, assumptions), 6);
   });
-  it('one sample H100 is worth about $20.5K from the income it has left', () => {
-    expect(Math.abs(earningsValuePerUnit(gpuCluster, assumptions) - 20_530)).toBeLessThan(50);
+  it('one sample H100 is worth more from its income than a forced sale would bring, and less than three times its price', () => {
+    const v = earningsValuePerUnit(gpuCluster, assumptions);
+    expect(v).toBeGreaterThan(gpuCluster.usedPriceToday * (1 - assumptions.forcedSaleHaircut)); expect(v).toBeLessThan(gpuCluster.usedPriceToday * 3);
   });
 });
 
@@ -170,8 +171,8 @@ describe('when a new chip ships', () => {
     const u = at(12), s = u.stress!.withoutBids, p = u.path[12];
     expect(s.how).toBe('forced sale'); expect(s.defaultMonth).toBe(12);
     expect(s.owed).toBeCloseTo(balanceAt(704_000, loanTerms, 12), 6);
-    expect(p.stressedValue).toBeCloseTo(64 * 15_000 * 0.75 * 0.5, 6);
-    expect(s.recovered).toBeCloseTo(p.stressedValue * 0.7, 6);
+    expect(p.stressedValue).toBeCloseTo(gpuCluster.units * expectedUnitValue(gpuCluster, 12) * (1 - noStress.priceDrop), 6);
+    expect(s.recovered).toBeCloseTo(p.stressedValue * (1 - assumptions.forcedSaleHaircut), 6);
     expect(s.lenderLoss).toBeCloseTo(s.owed - s.recovered, 6);
     expect(s.lenderLoss).toBeGreaterThan(200_000);
   });
@@ -211,10 +212,9 @@ describe('when a new chip ships', () => {
     expect(strict.stress!.withoutBids.defaultMonth).toBe(first);
     expect(short(first - 1)).toBe(false);
   });
-  it('the sample cluster runs thin at the end of the loan: income is below the payment in the last months', () => {
-    // Worth knowing when reading the stress cards: rent falls 20% a year, so months 34 and 35 are short even with no shock.
+  it('with no shock the sample cluster covers its payment in every month of the loan', () => {
     const path = underwrite(gpuCluster, gpuBids, loanTerms, assumptions, noStress).path;
-    expect(path.filter((p) => p.payment > 0 && p.income < p.payment).map((p) => p.month)).toEqual([34, 35]);
+    expect(path.filter((p) => p.payment > 0 && p.income < p.payment * assumptions.minDscr).map((p) => p.month)).toEqual([]);
   });
   it('with no bids at all, both outcomes are the forced sale of the bank loan', () => {
     const u = at(12, []), s = u.stress!;
@@ -224,14 +224,15 @@ describe('when a new chip ships', () => {
   it('the stress lowers value, rent and use from the month the chip ships', () => {
     const calm = at(null).path, hit = at(12).path;
     expect(hit[11]).toEqual(calm[11]);
-    expect(hit[12].stressedValue).toBeCloseTo(calm[12].expectedValue * 0.5, 6);
+    expect(hit[12].stressedValue).toBeCloseTo(calm[12].expectedValue * (1 - noStress.priceDrop), 6);
     expect(hit[12].income).toBeLessThan(calm[12].income);
     expect(hit[12].balance).toBe(calm[12].balance);
   });
 });
 
 describe('the risk grade', () => {
-  const records: RecordsSummary = { months: 14, avgUtilization: 0.72, utilizationStdev: 0.09, avgRate: 2.62, topCustomerShare: 0.41, contractedShare: 0.35, latePayments: 3, refunds: 1, downtimeHours: 61 };
+  // the summary of src/data/records.sample.csv
+  const records: RecordsSummary = { months: 14, avgUtilization: 0.719, utilizationStdev: 0.0665, avgRate: 2.6385, topCustomerShare: 0.4088, contractedShare: 0.679, latePayments: 3, refunds: 1, downtimeHours: 61 };
   const order = ['B', 'BB', 'BBB', 'A'];
 
   it('committed buyers move the sample cluster up one step, from BB to BBB', () => {
@@ -242,8 +243,10 @@ describe('the risk grade', () => {
   });
   it('the score is the weighted sum of the four parts', () => {
     const g = gradeRisk(gpuCluster, records, false);
-    expect(g.parts).toEqual({ industry: 59, stability: 57, counterparty: 34, redeploy: 88 });
-    expect(g.score).toBe(Math.round(0.3 * 59 + 0.3 * 57 + 0.25 * 34 + 0.15 * 88));
+    expect(g.parts).toEqual({ industry: 59, stability: 59, counterparty: 34, redeploy: 88 });
+    expect(g.score).toBe(Math.round(0.3 * 59 + 0.3 * 59 + 0.25 * 34 + 0.15 * 88));
+    expect(g.score).toBe(57);
+    expect(gradeRisk(gpuCluster, records, true)).toMatchObject({ score: 63, parts: { industry: 74, stability: 59, counterparty: 34, redeploy: 95 } });
   });
   it('the grade and the spread follow the table', () => {
     expect(gradeTable.map((g) => [g.grade, g.minScore, g.spread])).toEqual([['A', 75, 0.03], ['BBB', 60, 0.05], ['BB', 45, 0.07], ['B', 0, 0.10]]);

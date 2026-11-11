@@ -1,0 +1,66 @@
+{
+  "summary": {
+    "months": 14,
+    "avgUtilization": 0.719,
+    "utilizationStdev": 0.0665,
+    "avgRate": 2.6385,
+    "topCustomerShare": 0.4088,
+    "contractedShare": 0.679,
+    "latePayments": 3,
+    "refunds": 1,
+    "downtimeHours": 61
+  },
+  "flags": [
+    {
+      "id": "concentration",
+      "severity": "high",
+      "title": "One customer is 41% of revenue",
+      "detail": "C-07 brings 41% of revenue and its contract ends 2026-12-31.",
+      "rows": [
+        99,
+        107,
+        115
+      ]
+    },
+    {
+      "id": "price-cut",
+      "severity": "medium",
+      "title": "Price cut for the biggest customer",
+      "detail": "C-07 paid $2.50 per GPU-hour until 2026-05-31 and $2.15 from 2026-06-30.",
+      "rows": [
+        83
+      ]
+    },
+    {
+      "id": "late",
+      "severity": "medium",
+      "title": "3 invoices paid late",
+      "detail": "Invoices dated 2026-05-31, 2026-07-31 and 2026-08-31 were paid 31 to 47 days after the due date.",
+      "rows": [
+        72,
+        91,
+        99
+      ]
+    },
+    {
+      "id": "refund",
+      "severity": "medium",
+      "title": "A refund of $9,360",
+      "detail": "C-07 was refunded $9,360 on the invoice dated 2026-03-31 (note: \"service credit\").",
+      "rows": [
+        56
+      ]
+    },
+    {
+      "id": "downtime",
+      "severity": "low",
+      "title": "61 hours of downtime in 2026-02",
+      "detail": "The record for 2026-02-28 notes: \"cooling fault, 16 GPUs offline\".",
+      "rows": [
+        47
+      ]
+    }
+  ],
+  "memo": "Over 14 months the cluster was in use 72% of the time at an average of $2.64 per GPU-hour, and 68% of revenue was under contract. The main worry: C-07 brings 41% of revenue and its contract ends 2026-12-31. Also on record: price cut for the biggest customer, 3 invoices paid late, a refund of $9,360 and 61 hours of downtime in 2026-02.",
+  "source": "stored"
+}

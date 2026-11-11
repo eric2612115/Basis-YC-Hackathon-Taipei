@@ -6,7 +6,7 @@ export const APP_NAME = 'Basis'; // shown in one place only
 export const gpuCluster: Asset = {
   kind: 'gpu', name: '64 × Nvidia H100', units: 64, unitLabel: 'GPU',
   usedPriceToday: 15_000, depreciationPerYear: 0.25, volatility: 0.45, bankAdvanceRate: 0.5,
-  ratePerHour: 2.71, utilization: 0.72, hoursPerMonth: 730, opexPerUnitMonth: 420, rentDeclinePerYear: 0.2, lifeMonthsRemaining: 46,
+  ratePerHour: 2.71, utilization: 0.72, hoursPerMonth: 730, opexPerUnitMonth: 420, rentDeclinePerYear: 0.15, lifeMonthsRemaining: 46,
 };
 
 /** A ladder of committed buyers: each price sits below the expected resale value in its window. */

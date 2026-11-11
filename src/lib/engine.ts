@@ -228,7 +228,7 @@ export function gradeRisk(asset: Asset, records: RecordsSummary, hasBids: boolea
 
   const concentrationPenalty = 100 * records.topCustomerShare;
   const paymentPenalty = Math.min(40, 8 * (records.latePayments + records.refunds));
-  const contractBonus = 20 * records.contractedShare;
+  const contractBonus = 10 * records.contractedShare;
   const counterparty = Math.round(clamp(100 - concentrationPenalty - paymentPenalty + contractBonus));
 
   const redeploy = Math.round(clamp(hasBids ? Math.max(REDEPLOY_BASE[asset.kind], COVERED_REDEPLOY_SCORE) : REDEPLOY_BASE[asset.kind]));
