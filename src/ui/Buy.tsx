@@ -1,6 +1,7 @@
 // Buy: for someone who wants used machines at a discount. Commit to a price, get paid today, and the lender can lend against it.
 import { useMemo, useState } from 'react';
 import { quoteBid } from '../lib/engine';
+import { tradeAsset } from '../data/samples';
 import { useStore } from './store';
 import { BidList } from './Bids';
 import { NumberField } from './fields';
@@ -21,7 +22,7 @@ export function Buy() {
   const q = useMemo(
     () =>
       valid
-        ? quoteBid(asset, { id: 'draft', buyer: 'You', units, pricePerUnit: price, validThroughMonth: months, fundedPct: 1 }, assumptions)
+        ? quoteBid(tradeAsset(asset), { id: 'draft', buyer: 'You', units, pricePerUnit: price, validThroughMonth: months, fundedPct: 1 }, assumptions)
         : null,
     [asset, units, price, months, assumptions, valid],
   );
