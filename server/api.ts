@@ -10,6 +10,7 @@ import { analyzeRecords, createLimiter, RecordsError, type AnalyzeOptions } from
 import { createBidBoard, type BidBoard } from './bids';
 import { createLeadBook, type LeadBook } from './leads';
 import { InputError } from './store';
+import { createCheckout, type CheckoutInput } from './stripe';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dataFile = (name: string) => path.join(root, 'src', 'data', name);
@@ -29,6 +30,7 @@ export interface ApiDeps {
   bidLimiter?: Limiter;            // bids posted: 20 an hour per address
   leadLimiter?: Limiter;           // requests sent: 10 an hour per address
   adminToken?: string;             // when set, DELETE /bids with this token clears visitors' bids
+  stripeKey?: string;              // when set, POST /checkout opens a Stripe payment page for the fee
   log?: (message: string) => void;
 }
 
@@ -57,6 +59,25 @@ export function createApi(deps: ApiDeps): Router {
   router.use(express.json({ limit: BODY_LIMIT }));
 
   router.get('/health', (_req, res) => { res.json({ ok: true }); });
+
+  // Paying the fee: whether it is switched on, and a Stripe payment page for one promise.
+  router.get('/checkout', (_req, res) => { res.json({ enabled: Boolean(deps.stripeKey) }); });
+  router.post('/checkout', async (req, res) => {
+    if (!deps.stripeKey) { res.status(404).json({ error: 'Payments are not switched on.' }); return; }
+    if (!allow(bidLimiter(address(req)), res, 'payments')) return;
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const asset = assetOf(b.asset);
+    if (!asset) { res.status(400).json({ error: 'Say which machines: gpu or robot.' }); return; }
+    const input: CheckoutInput = { asset, units: Number(b.units), pricePerUnit: Number(b.pricePerUnit), months: Number(b.months) };
+    const proto = (req.get('x-forwarded-proto') ?? req.protocol).split(',')[0].trim();
+    try {
+      res.json({ url: await createCheckout(deps.stripeKey, input, `${proto}://${req.get('host')}`) });
+    } catch (e) {
+      if (e instanceof InputError) { res.status(400).json({ error: e.message }); return; }
+      log(`checkout: ${e instanceof Error ? e.message : String(e)}`);
+      res.status(502).json({ error: 'The payment page could not be opened.' });
+    }
+  });
 
   router.get('/prices', (_req, res) => { res.set('cache-control', 'no-store'); res.json(deps.prices.feed()); });
 

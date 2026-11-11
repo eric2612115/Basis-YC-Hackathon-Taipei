@@ -10,7 +10,7 @@ import { createPriceFeed } from './prices';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-// A local .env (git-ignored) may hold AI_API_KEY, AI_MODEL, AI_BASE_URL and ADMIN_TOKEN. When hosted they come from the host.
+// A local .env (git-ignored) may hold AI_API_KEY, AI_MODEL, AI_BASE_URL, ADMIN_TOKEN and STRIPE_SECRET_KEY. When hosted they come from the host.
 const envFile = path.join(root, '.env');
 if (fs.existsSync(envFile)) process.loadEnvFile(envFile);
 
@@ -22,6 +22,7 @@ const api = createApi({
   bids: createBidBoard({ file: data('bids.json') }),
   leads: createLeadBook({ file: data('leads.json') }),
   adminToken: process.env.ADMIN_TOKEN || undefined,
+  stripeKey: process.env.STRIPE_SECRET_KEY || undefined,
 });
 
 const app = express();

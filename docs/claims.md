@@ -17,3 +17,4 @@ Each claim Basis makes, and the test that proves it. Run them all with `npm test
 | 11 | No figure from the model reaches the screen unless it is in the records | "drops a flag with a number that is not in the records" | `server/analyze.test.ts` |
 | 12 | The reference price is the median of live prices from RunPod and Akash | "after a fetch it is live: two sources, the median as the reference, one tick of history" | `server/prices.test.ts` |
 | 13 | Only the person who posted a bid can remove it | "only the token removes a posted bid; sample bids stay" | `server/board.test.ts` |
+| 14 | The fee charged through Stripe is the fee the engine prices, never an amount from the browser | "charges the fee the engine prices for the promise, in cents" | `server/stripe.test.ts` |

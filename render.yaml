@@ -13,5 +13,7 @@ services:
         sync: false
       - key: AI_MODEL
         sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
       - key: ADMIN_TOKEN
         generateValue: true

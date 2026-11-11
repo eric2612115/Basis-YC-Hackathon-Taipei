@@ -5,6 +5,7 @@ const VIEWS: readonly View[] = ['trade', 'borrow', 'buy', 'prices'];
 
 function readView(): View {
   const h = window.location.hash.replace(/^#\/?/, '');
+  if (!h && new URLSearchParams(window.location.search).get('paid') === '1') return 'trade'; // back from the payment page
   return (VIEWS as readonly string[]).includes(h) ? (h as View) : 'borrow';
 }
 

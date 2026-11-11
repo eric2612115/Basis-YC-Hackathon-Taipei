@@ -28,6 +28,7 @@ With Basis, buyers who want used GPUs at a discount commit to a price today, and
 
 ## Try it
 
+0. **Trade**: one deal from both sides. The buyer posts a bid, the GPU owner asks for a price, they match; then watch the buyer get paid for waiting and the owner get protected as the price moves. The owner pays the fee on a Stripe Checkout page.
 1. **Borrow**, step 1: read the sample rental records. The model flags what a lender should worry about, with the rows it read, and the cluster gets a risk grade.
 2. Step 2: what a bank lends.
 3. Step 3: line up buyers and watch what a lender can lend.
@@ -68,6 +69,7 @@ Then open http://localhost:5174. No keys are needed: prices come from two public
 | `AI_API_KEY` | Lets the model read uploaded records. The default provider is GMI Cloud, through its OpenAI-compatible API |
 | `AI_MODEL`, `AI_BASE_URL` | Pick the model, or another OpenAI-compatible provider |
 | `ADMIN_TOKEN` | Lets the host clear visitors' bids back to the sample ladder |
+| `STRIPE_SECRET_KEY` | Turns on "Pay the fee" in the Trade view: the owner pays the buyer's fee on a Stripe Checkout page (use a test-mode key) |
 | `PORT` | Where the server listens |
 
 ## What is in the repo

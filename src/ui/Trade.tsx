@@ -10,13 +10,19 @@ import '../styles/trade.css';
 
 const MONTHS = 6;
 type Path = 'fall' | 'hold';
+/** True when the visitor has just come back from Stripe's payment page. */
+const cameBackPaid = () => new URLSearchParams(window.location.search).get('paid') === '1';
 
 export function Trade() {
-  const { asset, assumptions } = useStore();
+  const { asset, assumptions, kind } = useStore();
   const units = asset.units;
   const price = Math.round((asset.usedPriceToday * 11) / 15 / 100) * 100; // $11,000 for the sample H100
-  const [bid, setBid] = useState(false);
-  const [ask, setAsk] = useState(false);
+  const [feePaid, setFeePaid] = useState(cameBackPaid);
+  const [bid, setBid] = useState(feePaid);
+  const [ask, setAsk] = useState(feePaid);
+  const [canPay, setCanPay] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState('');
   const [path, setPath] = useState<Path>('fall');
   const [month, setMonth] = useState(0);
   const matched = bid && ask;
@@ -44,7 +50,25 @@ export function Trade() {
   }, [matched, path]);
 
   const paid = useCountUp(matched ? q.feeTotal : 0, 900);
-  const reset = () => { cancelAnimationFrame(raf.current); setBid(false); setAsk(false); setMonth(0); };
+  const reset = () => { cancelAnimationFrame(raf.current); setBid(false); setAsk(false); setMonth(0); setFeePaid(false); setPayError(''); };
+
+  // the fee can be paid by card when the server has a Stripe key; coming back from Stripe, tidy the address
+  useEffect(() => {
+    fetch('/api/checkout').then((r) => r.json()).then((d: { enabled?: boolean }) => setCanPay(Boolean(d.enabled))).catch(() => {});
+    if (cameBackPaid()) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }, []);
+  const payFee = async () => {
+    setPaying(true); setPayError('');
+    try {
+      const r = await fetch('/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ asset: kind, units, pricePerUnit: price, months: MONTHS }) });
+      const d = (await r.json()) as { url?: string; error?: string };
+      if (!r.ok || !d.url) throw new Error(d.error ?? 'The payment page could not be opened.');
+      window.location.assign(d.url);
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : 'The payment page could not be opened.');
+      setPaying(false);
+    }
+  };
 
   // chart
   const Wc = 520, Hc = 150, top = asset.usedPriceToday * 1.08, lo = asset.usedPriceToday * 0.45;
@@ -94,6 +118,9 @@ export function Trade() {
             <div className={`big num ${below ? 'good-text' : ''}`}>{usdShort(Math.max(0, price - market) * units)}</div>
             <div className="sub">guaranteed {usd(price)} per {asset.unitLabel}, market {usd(Math.round(market / 10) * 10)}</div>
             <div className="line">{settled ? (below ? `Sells at ${usd(price)}, not ${usd(Math.round(market / 10) * 10)}` : 'Keeps the machines. Paid the fee.') : below ? 'Covered below the agreed price' : 'Covered if prices fall'}</div>
+            {feePaid ? <div className="pay good-text">Fee paid: {usdShort(q.feeTotal)} <span className="meta">Stripe, test mode</span></div>
+              : canPay && <div className="pay"><button className="btn" onClick={payFee} disabled={paying}>{paying ? 'Opening Stripe' : `Pay the ${usdShort(q.feeTotal)} fee`}</button><span className="meta">Stripe, test mode</span></div>}
+            {payError && <div className="meta bad-text">{payError}</div>}
           </div>
         </section>
       </div>
