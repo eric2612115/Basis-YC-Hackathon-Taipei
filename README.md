@@ -4,6 +4,8 @@
 
 **Try it live: [basis-lucs.onrender.com](https://basis-lucs.onrender.com)** (free plan: the first visit can take half a minute to wake up). Start with **Trade**.
 
+**Watch the 90-second demo: [youtube.com/watch?v=7tof7oNPiD8](https://www.youtube.com/watch?v=7tof7oNPiD8).** The product clips on their own: [a buyer posts a bid](demo/demo-buy.mp4), [a deal paid through Stripe's test checkout](demo/demo-stripe.mp4), [a lender lends more as buyers commit](demo/demo-borrow.mp4).
+
 Built on 11 November 2026 at c0mpiled-18, the YC Startup School hackathon in Taipei, for the YC request for startups "Wall Street for the Physical Buildout".
 
 ## Why now
