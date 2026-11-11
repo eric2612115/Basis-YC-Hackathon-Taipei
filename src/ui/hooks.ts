@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
-export type View = 'borrow' | 'buy' | 'prices';
-const VIEWS: readonly View[] = ['borrow', 'buy', 'prices'];
+export type View = 'trade' | 'borrow' | 'buy' | 'prices';
+const VIEWS: readonly View[] = ['trade', 'borrow', 'buy', 'prices'];
 
 function readView(): View {
   const h = window.location.hash.replace(/^#\/?/, '');

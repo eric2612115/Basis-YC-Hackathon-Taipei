@@ -4,9 +4,11 @@ import { useView, type View } from './hooks';
 import { Borrow } from './Borrow';
 import { Buy } from './Buy';
 import { Prices } from './Prices';
+import { Trade } from './Trade';
 import { Mark } from './Mark';
 
 const TABS: { view: View; label: string }[] = [
+  { view: 'trade', label: 'Trade' },
   { view: 'borrow', label: 'Borrow' },
   { view: 'buy', label: 'Buy' },
   { view: 'prices', label: 'Prices' },
@@ -40,6 +42,7 @@ function Shell() {
         </div>
       </header>
       <main>
+        {view === 'trade' && <Trade key={kind} />}
         {view === 'borrow' && <Borrow />}
         {view === 'buy' && <Buy key={kind} />}
         {view === 'prices' && <Prices />}

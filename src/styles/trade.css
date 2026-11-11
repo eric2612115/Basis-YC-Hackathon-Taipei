@@ -1,0 +1,26 @@
+.trade .lede { margin-bottom: 28px; }
+.trade-grid { display: grid; grid-template-columns: 1fr 1.25fr 1fr; gap: 20px; align-items: stretch; }
+.trade .side { border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 14px; min-height: 360px; transition: border-color .3s; }
+.trade .side.posted { border-color: var(--brass-fill); }
+.trade .side-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.trade .who { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; }
+.trade .order { font-size: 17px; color: var(--ink-2); }
+.trade .btn.primary { background: var(--ink); color: #fff; border: 0; border-radius: 10px; padding: 12px 16px; font-weight: 700; cursor: pointer; align-self: flex-start; }
+.trade .chip { align-self: flex-start; background: var(--brass-soft); color: var(--brass); font-weight: 700; font-size: 13px; border-radius: 999px; padding: 6px 12px; }
+.trade .result { margin-top: auto; opacity: 0; transform: translateY(6px); transition: opacity .5s, transform .5s; }
+.trade .result.show { opacity: 1; transform: none; }
+.trade .result .line { margin-top: 12px; font-weight: 700; }
+.trade .mid { border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 10px; align-items: center; text-align: center; }
+.trade-chart { width: 100%; height: auto; margin: 6px 0; }
+.trade-chart .floor { stroke: var(--line); stroke-width: 2; stroke-dasharray: 5 6; transition: stroke .4s; }
+.trade-chart .floor.on { stroke: var(--brass-fill); stroke-dasharray: none; stroke-width: 3; }
+.trade-chart .floor-label { font-size: 13px; font-weight: 700; fill: var(--faint); }
+.trade-chart .floor-label.on { fill: var(--brass); }
+.trade-chart .path { fill: none; stroke: var(--ink); stroke-width: 2.5; stroke-linejoin: round; }
+.trade-chart .dot-now { fill: var(--ink); }
+.trade .switch { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; gap: 2px; }
+.trade .switch button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-weight: 600; font-size: 13px; color: var(--muted); cursor: pointer; }
+.trade .switch button.on { background: var(--ink); color: #fff; }
+.trade .link { border: 0; background: none; text-decoration: underline; color: var(--muted); cursor: pointer; font-size: 13px; }
+.trade-note { margin-top: 18px; }
+@media (max-width: 820px) { .trade-grid { grid-template-columns: 1fr; } .trade .side { min-height: 0; } }
